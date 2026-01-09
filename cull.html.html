@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cull | Intelligence Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #050505;
+            --header-bg: #050505;
+            --text-main: #ededed;
+            --text-muted: #71717a;
+            --accent: #ffffff;
+            --border: rgba(255, 255, 255, 0.08);
+            --glass: rgba(255, 255, 255, 0.02);
+            --tile-bg: rgba(255, 255, 255, 0.02);
+            --modal-bg: rgba(0, 0, 0, 0.95);
+            --input-bg: #18181b;
+        }
+
+        body.light-mode {
+            --bg-deep: #f4f4f5;
+            --header-bg: #f4f4f5;
+            --text-main: #09090b;
+            --text-muted: #71717a;
+            --accent: #000000;
+            --border: rgba(0, 0, 0, 0.1);
+            --glass: rgba(255, 255, 255, 0.8);
+            --tile-bg: #ffffff;
+            --modal-bg: rgba(255, 255, 255, 0.98);
+            --input-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .glass {
+            background: var(--tile-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass:hover {
+            border: 1px solid var(--accent);
+        }
+
+        .news-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-auto-flow: row dense;
+            gap: 1rem;
+            width: 100%;
+            flex-grow: 1;
+            padding-bottom: 2rem;
+            overflow-y: auto;
+            mask-image: linear-gradient(to bottom, black 95%, transparent 100%);
+        }
+
+        .span-full {
+            grid-column: 1 / span 2 !important;
+        }
+
+        @media (max-width: 850px) {
+            .news-grid {
+                grid-template-columns: 1fr;
+            }
+            .span-full {
+                grid-column: 1 / span 1 !important;
+            }
+        }
+
+        .news-tile {
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border-radius: 1.5rem;
+            position: relative;
+        }
+
+        .status-pill {
+            font-size: 0.6rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: var(--border);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .article-card h4 { 
+            color: var(--text-main); 
+            opacity: 1;
+        }
+        .article-card:hover h4 { 
+            text-decoration: underline;
+        }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 10px;
+        }
+
+        .loading-shimmer {
+            background: linear-gradient(90deg, transparent, var(--border), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .ai-summary-overlay {
+            background: var(--modal-bg);
+            backdrop-filter: blur(20px);
+            position: absolute;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .pulse-dot {
+            width: 6px;
+            height: 6px;
+            background: #22c55e;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px #22c55e;
+            animation: pulse-kf 2s infinite;
+        }
+        @keyframes pulse-kf {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+        }
+
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .animate-spin-once { animation: spin 0.6s ease-in-out; }
+        .animate-spin-infinite { animation: spin 1s linear infinite; }
+
+        .template-btn {
+            background: var(--tile-bg);
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 10px;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+        .template-btn:hover {
+            background: var(--accent);
+            color: var(--bg-deep);
+        }
+        
+        .mode-toggle {
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--tile-bg);
+            color: var(--text-main);
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-6 lg:p-8">
+
+    <header class="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4 flex-shrink-0">
+        <div class="z-10 w-full lg:w-auto">
+            <div class="flex items-center gap-3 flex-nowrap">
+                <h1 class="text-2xl md:text-3xl font-black tracking-tighter" style="color: var(--text-main)">CULL</h1>
+                <span class="h-5 w-[1px] bg-zinc-400 opacity-20"></span>
+                <p class="text-[9px] md:text-[10px] text-zinc-500 uppercase tracking-[0.2em] font-bold whitespace-nowrap overflow-hidden text-ellipsis">Cull the noise, read what matters</p>
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+                <p id="current-date" class="text-[9px] text-zinc-500 font-mono uppercase tracking-widest"></p>
+                <span class="pulse-dot ml-1"></span>
+                <p id="pulse-status" class="text-[9px] text-zinc-500 font-mono uppercase tracking-tighter">Live Feed</p>
+            </div>
+        </div>
+        
+        <div class="flex flex-nowrap items-center gap-2 md:gap-3 z-10 w-full lg:w-auto justify-end">
+            <div class="flex items-center gap-2">
+                <button onclick="toggleTheme()" class="mode-toggle" id="theme-btn">
+                    <svg id="moon-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                    <svg id="sun-icon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"></path></svg>
+                </button>
+                <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded-full light-mode:bg-white light-mode:border-zinc-200">
+                    <button onclick="refreshAllTiles()" id="refresh-all-btn" class="p-2 text-zinc-400 hover:text-white transition-all light-mode:hover:text-black">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15"></path></svg>
+                    </button>
+                    <span class="w-[1px] h-4 bg-zinc-800 light-mode:bg-zinc-200"></span>
+                    <button onclick="toggleGlobalCull()" id="cull-all-btn" class="text-zinc-300 px-4 py-2 text-[10px] font-bold hover:text-white transition-all flex items-center gap-2 dark:text-zinc-300 light-mode:text-black">
+                        ✨ CULL ALL
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center bg-zinc-900/50 light-mode:bg-zinc-200/50 rounded-full border border-zinc-500/20 p-1">
+                <div id="tile-count" class="text-[10px] text-zinc-500 font-mono px-3 py-1 whitespace-nowrap">
+                    0/6 TILES
+                </div>
+                <button onclick="addNewTile()" id="add-btn" class="bg-white text-black px-4 py-1.5 rounded-full text-[10px] font-black hover:opacity-80 transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed dark:bg-white dark:text-black light-mode:bg-black light-mode:text-white whitespace-nowrap">
+                    + ADD FOCUS
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div id="news-container" class="news-grid"></div>
+
+    <div id="empty-state" class="hidden absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <div class="text-zinc-500 opacity-20 mb-4">
+             <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1" d="M12 4v16m8-8H4"></path></svg>
+        </div>
+        <p class="text-zinc-500 text-xs uppercase tracking-widest font-bold">Add Intelligence Focus</p>
+    </div>
+
+    <!-- Define/Edit Tile Modal -->
+    <div id="edit-modal" class="fixed inset-0 z-50 flex items-center justify-center p-6 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeEdit()"></div>
+        <div class="glass w-full max-w-lg rounded-3xl p-8 relative z-10" style="background: var(--input-bg)">
+            <h3 id="modal-title" class="text-xl font-bold mb-6" style="color: var(--text-main)">Define New Tile</h3>
+            
+            <div id="quick-templates-box" class="mb-6">
+                <label class="text-[10px] uppercase tracking-widest text-zinc-500 block mb-3">Quick Templates</label>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="applyTemplate('Geopolitics', 'Global conflicts, diplomacy, and trade.')" class="template-btn">GEOPOLITICS</button>
+                    <button onclick="applyTemplate('Business', 'Corporate earnings and M&A activity.')" class="template-btn">BUSINESS</button>
+                    <button onclick="applyTemplate('Markets', 'Macro trends and central bank updates.')" class="template-btn">MARKETS</button>
+                    <button onclick="applyTemplate('Tech', 'Silicon Valley breakthroughs and AI.')" class="template-btn">TECH</button>
+                    <button onclick="applyTemplate('Sports', 'Major league results and trades.')" class="template-btn">SPORTS</button>
+                </div>
+            </div>
+
+            <div class="space-y-6">
+                <div>
+                    <label class="text-[10px] uppercase tracking-widest text-zinc-500 block mb-2">Title</label>
+                    <input type="text" id="edit-name" oninput="debouncedSuggest()" placeholder="e.g. Space Exploration" class="w-full bg-transparent border border-zinc-400/20 p-3 rounded-xl text-sm focus:border-zinc-500 transition-all outline-none" style="color: var(--text-main)">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-[10px] uppercase tracking-widest text-zinc-500 block">Description</label>
+                        <span id="ai-status" class="text-[8px] text-zinc-600 font-mono hidden">AI GENERATING...</span>
+                    </div>
+                    <textarea id="edit-focus" rows="3" placeholder="Define the filter criteria..." class="w-full bg-transparent border border-zinc-400/20 p-3 rounded-xl text-sm resize-none focus:border-zinc-500 transition-all outline-none" style="color: var(--text-main)"></textarea>
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button onclick="closeEdit()" class="px-6 py-2 rounded-full text-xs text-zinc-500 hover:text-white transition">Cancel</button>
+                    <button onclick="saveTile()" class="bg-black text-white px-8 py-2 rounded-full text-xs font-bold hover:opacity-80 transition dark:bg-white dark:text-black light-mode:bg-black light-mode:text-white">Initialize Feed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const apiKey = "AIzaSyDSA_XM15GWic56XVl8FFcA2XLWRtlhAHw"; 
+        let tiles = JSON.parse(localStorage.getItem('cull_tiles')) || [];
+        const currentNewsData = {}; 
+        let activeEditId = null;
+        let lastRefreshedTime = new Date();
+        let isGlobalCulled = false;
+        let suggestionTimeout = null;
+
+        function toggleTheme() {
+            const body = document.body;
+            const moon = document.getElementById('moon-icon');
+            const sun = document.getElementById('sun-icon');
+            if (body.classList.contains('light-mode')) {
+                body.classList.remove('light-mode');
+                moon.classList.remove('hidden');
+                sun.classList.add('hidden');
+                localStorage.setItem('cull_theme', 'dark');
+            } else {
+                body.classList.add('light-mode');
+                moon.classList.add('hidden');
+                sun.classList.remove('hidden');
+                localStorage.setItem('cull_theme', 'light');
+            }
+        }
+
+        async function fetchWithRetry(url, options, retries = 5, delay = 1000) {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok) {
+                    if (retries > 0 && (response.status === 429 || response.status >= 500)) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return fetchWithRetry(url, options, retries - 1, delay * 2);
+                    }
+                    throw new Error(`API Error: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                if (retries > 0) {
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return fetchWithRetry(url, options, retries - 1, delay * 2);
+                }
+                throw error;
+            }
+        }
+
+        function extractJson(text) {
+            if (!text) return [];
+            try {
+                const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const start = cleaned.indexOf('[');
+                const end = cleaned.lastIndexOf(']');
+                if (start !== -1 && end !== -1) return JSON.parse(cleaned.substring(start, end + 1));
+                return JSON.parse(cleaned);
+            } catch (e) { return null; }
+        }
+
+        function debouncedSuggest() {
+            clearTimeout(suggestionTimeout);
+            const title = document.getElementById('edit-name').value;
+            if (title.length < 3) return;
+            suggestionTimeout = setTimeout(() => generateDescriptionSuggestion(title), 800);
+        }
+
+        async function generateDescriptionSuggestion(title) {
+            const status = document.getElementById('ai-status');
+            status.classList.remove('hidden');
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            try {
+                const result = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Based on the news tile title "${title}", write a one-sentence description. Max 8 words.` }] }],
+                        systemInstruction: { parts: [{ text: "Expert curator. Concise." }] }
+                    })
+                });
+                const suggestion = result.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                if (suggestion && !document.getElementById('edit-focus').value) {
+                    document.getElementById('edit-focus').value = suggestion.trim();
+                }
+            } catch (e) { console.error(e); } finally { status.classList.add('hidden'); }
+        }
+
+        function applyTemplate(name, desc) {
+            document.getElementById('edit-name').value = name;
+            document.getElementById('edit-focus').value = desc;
+        }
+
+        async function fetchNews(focus) {
+            if (!focus) return [];
+            const todayStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            try {
+                const result = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `News search for: "${focus}".` }] }],
+                        systemInstruction: { parts: [{ text: `Precision news crawler. Today: ${todayStr}. Get 8-10 relevant stories for: "${focus}". Valid JSON: [{"title": "...", "source": "...", "url": "...", "time": "...", "relevance": 0-100}]` }] },
+                        tools: [{ "google_search": {} }]
+                    })
+                });
+                const content = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                const parsed = extractJson(content);
+                return (parsed && parsed.length) ? parsed.slice(0, 10) : [{ title: "No news found.", source: "System", time: "Now", url: "#" }];
+            } catch (e) {
+                return [{ title: "Connection delayed.", source: "System", time: "Slow", url: "#" }];
+            }
+        }
+
+        async function refreshAllTiles() {
+            const btn = document.getElementById('refresh-all-btn');
+            btn.querySelector('svg').classList.add('animate-spin-infinite');
+            
+            tiles.forEach(tile => {
+                const contentArea = document.getElementById(`content-${tile.id}`);
+                if (contentArea) contentArea.innerHTML = '<div class="space-y-4 pt-2"><div class="h-14 w-full loading-shimmer rounded-xl"></div></div>';
+            });
+
+            const promises = tiles.map(tile => loadTileContent(tile));
+            await Promise.all(promises);
+            
+            btn.querySelector('svg').classList.remove('animate-spin-infinite');
+            updateRefreshTimestamp();
+        }
+
+        async function toggleGlobalCull() {
+            const btn = document.getElementById('cull-all-btn');
+            if (isGlobalCulled) {
+                tiles.forEach(tile => closeSummary(tile.id));
+                btn.innerHTML = '✨ CULL ALL';
+                isGlobalCulled = false;
+            } else {
+                btn.innerHTML = '✨ SYNTESIZING...';
+                btn.disabled = true;
+                for (const tile of tiles) { await summarizeNews(tile.id); }
+                btn.innerHTML = '↩️ UNCULL ALL';
+                btn.disabled = false;
+                isGlobalCulled = true;
+            }
+        }
+
+        async function summarizeNews(tileId) {
+            const tile = tiles.find(t => t.id === tileId);
+            const articles = currentNewsData[tileId];
+            if (!articles || articles.length === 0 || articles[0].time === "Slow") return;
+            
+            const summaryContainer = document.getElementById(`summary-${tileId}`);
+            if (!summaryContainer) return;
+            
+            summaryContainer.classList.remove('hidden');
+            summaryContainer.innerHTML = `
+                <div class="p-8 h-full flex flex-col justify-center items-center text-center">
+                    <div class="mb-8">
+                        <span class="text-[10px] font-black tracking-[0.4em] text-zinc-500 uppercase block mb-2">Synthesis Focus</span>
+                        <h2 class="text-xl font-bold" style="color: var(--text-main)">${tile.name}</h2>
+                    </div>
+                    
+                    <div id="summary-text-${tileId}" class="max-w-md text-base leading-relaxed mb-10" style="color: var(--text-main)">
+                        <div class="space-y-3">
+                            <div class="h-4 w-full loading-shimmer rounded"></div>
+                            <div class="h-4 w-3/4 loading-shimmer rounded mx-auto"></div>
+                        </div>
+                    </div>
+
+                    <button onclick="closeSummary(${tileId})" class="bg-zinc-800 text-white px-8 py-3 rounded-full text-[11px] font-black tracking-widest hover:bg-white hover:text-black transition-all transform active:scale-95">
+                        RETURN TO FEED
+                    </button>
+                </div>
+            `;
+
+            const text = articles.map(a => `[Source: ${a.source}] ${a.title}`).join('\n');
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            try {
+                const result = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Synthesize: \n${text}` }] }],
+                        systemInstruction: { parts: [{ text: "Expert intelligence officer. 40 words max. Clear, objective summary." }] }
+                    })
+                });
+                const rawSummary = result.candidates?.[0]?.content?.parts?.[0]?.text || "Synthesis complete.";
+                const textField = document.getElementById(`summary-text-${tileId}`);
+                if (textField) textField.innerText = rawSummary.replace(/\*/g, '').trim();
+            } catch (e) {
+                const textField = document.getElementById(`summary-text-${tileId}`);
+                if (textField) textField.innerText = "Briefing delayed. System busy.";
+            }
+        }
+
+        function closeSummary(tileId) {
+            const el = document.getElementById(`summary-${tileId}`);
+            if (el) el.classList.add('hidden');
+        }
+
+        function createTileHtml(tile) {
+            const data = currentNewsData[tile.id] || [];
+            return `
+                <div class="flex justify-between items-start mb-4 h-[60px] relative z-30">
+                    <div class="flex-1 min-w-0 pr-2">
+                        <h3 class="text-[11px] font-black uppercase tracking-[0.2em] truncate mb-1" style="color: var(--text-main)">${tile.name}</h3>
+                        <p class="text-[10px] text-zinc-500 truncate leading-tight">${tile.focus}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5 ml-auto">
+                        <button onclick="summarizeNews(${tile.id})" class="text-[9px] font-bold bg-transparent border border-zinc-500 px-3 py-1.5 rounded-full text-zinc-500 hover:border-black dark:hover:border-white transition whitespace-nowrap">✨ CULL</button>
+                        <button onclick="manualRefresh(${tile.id}, this)" class="p-1.5 text-zinc-500 hover:opacity-100 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357-2H15"></path></svg>
+                        </button>
+                        <button onclick="editTile(${tile.id})" class="p-1.5 text-zinc-500 hover:opacity-100 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        </button>
+                        <button onclick="removeTile(${tile.id})" class="p-1.5 text-zinc-500 hover:text-red-400 transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="content-${tile.id}" class="flex-grow overflow-y-auto space-y-4 pr-1 relative z-20">
+                    ${data.length ? renderArticles(data) : '<div class="space-y-4 pt-2"><div class="h-14 w-full loading-shimmer rounded-xl"></div><div class="h-14 w-full loading-shimmer rounded-xl"></div><div class="h-14 w-full loading-shimmer rounded-xl"></div></div>'}
+                </div>
+                <div id="summary-${tile.id}" class="ai-summary-overlay hidden"></div>
+            `;
+        }
+
+        function renderArticles(articles) {
+            return articles.map(item => `
+                <a href="${item.url}" target="_blank" class="article-card block">
+                    <div class="flex items-center gap-2 mb-1.5">
+                        <span class="status-pill">${item.source}</span>
+                        <span class="text-[9px] text-zinc-400 mono uppercase">${item.time}</span>
+                    </div>
+                    <h4 class="text-[13px] font-medium leading-relaxed transition-colors line-clamp-2">${item.title}</h4>
+                </a>
+            `).join('');
+        }
+
+        async function loadTileContent(tile) {
+            const news = await fetchNews(tile.focus);
+            currentNewsData[tile.id] = news;
+            const tileNode = document.getElementById(`tile-node-${tile.id}`);
+            if (tileNode) {
+                // We re-render but preserve the hidden/visible state of the summary overlay
+                const summaryWasVisible = !document.getElementById(`summary-${tile.id}`).classList.contains('hidden');
+                tileNode.innerHTML = createTileHtml(tile);
+                if (summaryWasVisible) document.getElementById(`summary-${tile.id}`).classList.remove('hidden');
+            }
+            updateRefreshTimestamp();
+        }
+
+        async function renderDashboard(fullRefresh = false) {
+            const container = document.getElementById('news-container');
+            document.getElementById('tile-count').innerText = `${tiles.length}/6 TILES`;
+            document.getElementById('add-btn').disabled = tiles.length >= 6;
+            
+            if (tiles.length === 0) {
+                document.getElementById('empty-state').classList.remove('hidden');
+                container.innerHTML = '';
+                return;
+            }
+            document.getElementById('empty-state').classList.add('hidden');
+            container.innerHTML = '';
+            
+            tiles.forEach((tile, index) => {
+                const el = document.createElement('div');
+                const isOrphan = (index === tiles.length - 1) && (tiles.length % 2 !== 0);
+                
+                el.id = `tile-node-${tile.id}`;
+                el.setAttribute('data-id', tile.id);
+                el.classList.add('news-tile', 'glass', 'p-6');
+                if (isOrphan) el.classList.add('span-full');
+                
+                el.innerHTML = createTileHtml(tile);
+                container.appendChild(el);
+                
+                if (fullRefresh || !currentNewsData[tile.id]) {
+                    loadTileContent(tile);
+                }
+            });
+            initSortable();
+        }
+
+        function initSortable() {
+            const container = document.getElementById('news-container');
+            if (!container) return;
+            Sortable.create(container, {
+                animation: 200,
+                onEnd: () => {
+                    const children = Array.from(container.children);
+                    tiles = children.map(child => tiles.find(t => t.id === parseInt(child.getAttribute('data-id'))));
+                    localStorage.setItem('cull_tiles', JSON.stringify(tiles));
+                    renderDashboard(false); 
+                }
+            });
+        }
+
+        function updateRefreshTimestamp() {
+            lastRefreshedTime = new Date();
+            updateRelativeTimeDisplay();
+        }
+
+        function updateRelativeTimeDisplay() {
+            const statusEl = document.getElementById('pulse-status');
+            const diffInSeconds = Math.floor((new Date() - lastRefreshedTime) / 1000);
+            statusEl.innerText = diffInSeconds >= 60 ? `Last Refreshed: ${Math.floor(diffInSeconds/60)}m ago` : "Live Feed";
+        }
+
+        async function manualRefresh(id, btn) {
+            btn.querySelector('svg').classList.add('animate-spin-once');
+            const contentArea = document.getElementById(`content-${id}`);
+            if (contentArea) contentArea.innerHTML = '<div class="space-y-4 pt-2"><div class="h-14 w-full loading-shimmer rounded-xl"></div></div>';
+            const tile = tiles.find(t => t.id === id);
+            if (tile) await loadTileContent(tile);
+            setTimeout(() => btn.querySelector('svg').classList.remove('animate-spin-once'), 600);
+        }
+
+        function addNewTile() {
+            activeEditId = Date.now();
+            document.getElementById('modal-title').innerText = 'Define New Tile';
+            document.getElementById('edit-name').value = '';
+            document.getElementById('edit-focus').value = '';
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function editTile(id) {
+            const tile = tiles.find(t => t.id === id);
+            activeEditId = id;
+            document.getElementById('modal-title').innerText = 'Edit Focus';
+            document.getElementById('edit-name').value = tile.name;
+            document.getElementById('edit-focus').value = tile.focus;
+            document.getElementById('edit-modal').classList.remove('hidden');
+        }
+
+        function saveTile() {
+            const name = document.getElementById('edit-name').value.trim();
+            const focus = document.getElementById('edit-focus').value.trim();
+            if (!name || !focus) return;
+            
+            const existingIndex = tiles.findIndex(t => t.id === activeEditId);
+            if (existingIndex !== -1) {
+                tiles[existingIndex].name = name;
+                tiles[existingIndex].focus = focus;
+                currentNewsData[activeEditId] = null; 
+                loadTileContent(tiles[existingIndex]);
+            } else {
+                const newTile = { id: activeEditId, name, focus };
+                tiles.push(newTile);
+            }
+            
+            localStorage.setItem('cull_tiles', JSON.stringify(tiles));
+            renderDashboard(false);
+            closeEdit();
+        }
+
+        function removeTile(id) {
+            tiles = tiles.filter(t => t.id !== id);
+            localStorage.setItem('cull_tiles', JSON.stringify(tiles));
+            renderDashboard(false);
+        }
+
+        function closeEdit() { document.getElementById('edit-modal').classList.add('hidden'); }
+
+        window.onload = () => {
+            const savedTheme = localStorage.getItem('cull_theme');
+            if (savedTheme === 'light') toggleTheme();
+            document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+            renderDashboard(true);
+            setInterval(updateRelativeTimeDisplay, 60000);
+        };
+    </script>
+</body>
+</html>
